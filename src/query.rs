@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use clubcard::{AsQuery, Clubcard, Equation, Queryable};
+use clubcard::{AsQuery, Clubcard, Equation, Membership, Queryable};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cmp::max;
@@ -19,19 +19,19 @@ pub struct CRLiteCoverage(pub(crate) HashMap<LogId, TimestampInterval>);
 pub struct CRLiteQuery<'a> {
     pub(crate) issuer: &'a [u8; 32],
     pub(crate) serial: &'a [u8],
-    pub(crate) log_timestamps: Option<&'a [([u8; 32], u64)]>,
+    pub(crate) log_timestamp: Option<(&'a [u8; 32], u64)>,
 }
 
 impl<'a> CRLiteQuery<'a> {
     pub fn new(
         issuer: &'a [u8; 32],
         serial: &'a [u8],
-        log_timestamps: Option<&'a [([u8; 32], u64)]>,
+        log_timestamp: Option<(&'a [u8; 32], u64)>,
     ) -> CRLiteQuery<'a> {
         CRLiteQuery {
             issuer,
             serial,
-            log_timestamps,
+            log_timestamp,
         }
     }
 }
@@ -76,14 +76,12 @@ impl<'a> Queryable<4> for CRLiteQuery<'a> {
     type PartitionMetadata = ();
 
     fn in_universe(&self, universe: &Self::UniverseMetadata) -> bool {
-        let Some(log_timestamps) = self.log_timestamps else {
+        let Some((log_id, timestamp)) = self.log_timestamp else {
             return false;
         };
-        for (log_id, timestamp) in log_timestamps {
-            if let Some((low, high)) = universe.0.get(log_id) {
-                if low <= timestamp && timestamp <= high {
-                    return true;
-                }
+        if let Some((low, high)) = universe.0.get(log_id) {
+            if *low <= timestamp && timestamp <= *high {
+                return true;
             }
         }
         false
@@ -95,6 +93,25 @@ pub enum ClubcardError {
     Serialize,
     Deserialize,
     UnsupportedVersion,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CRLiteStatus {
+    Good,
+    NotCovered,
+    NotEnrolled,
+    Revoked,
+}
+
+impl From<Membership> for CRLiteStatus {
+    fn from(membership: Membership) -> CRLiteStatus {
+        match membership {
+            Membership::Nonmember => CRLiteStatus::Good,
+            Membership::NotInUniverse => CRLiteStatus::NotCovered,
+            Membership::NoData => CRLiteStatus::NotEnrolled,
+            Membership::Member => CRLiteStatus::Revoked,
+        }
+    }
 }
 
 pub struct CRLiteClubcard(Clubcard<4, CRLiteCoverage, ()>);
@@ -141,5 +158,22 @@ impl CRLiteClubcard {
         bincode::deserialize(rest)
             .map(CRLiteClubcard)
             .map_err(|_| ClubcardError::Deserialize)
+    }
+
+    pub fn contains<'a>(
+        &self,
+        issuer_spki_hash: &'a [u8; 32],
+        serial: &'a [u8],
+        timestamps: impl Iterator<Item = (&'a [u8; 32], u64)>,
+    ) -> CRLiteStatus {
+        for (log_id, timestamp) in timestamps {
+            let crlite_key = CRLiteQuery::new(issuer_spki_hash, serial, Some((log_id, timestamp)));
+            let status = self.0.contains(&crlite_key).into();
+            if status == CRLiteStatus::NotCovered {
+                continue;
+            }
+            return status;
+        }
+        CRLiteStatus::NotCovered
     }
 }

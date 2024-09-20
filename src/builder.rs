@@ -72,7 +72,7 @@ impl<'a> From<&'a CRLiteBuilderItem> for CRLiteQuery<'a> {
         Self {
             issuer: &item.issuer,
             serial: &item.serial,
-            log_timestamps: None,
+            log_timestamp: None,
         }
     }
 }
@@ -185,7 +185,7 @@ mod tests {
                 let item = CRLiteQuery {
                     issuer: &issuer,
                     serial: &serial,
-                    log_timestamps: None,
+                    log_timestamp: None,
                 };
                 if clubcard.unchecked_contains(&item) {
                     included += 1;
@@ -204,7 +204,7 @@ mod tests {
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &serial,
-            log_timestamps: None,
+            log_timestamp: None,
         };
         assert!(!clubcard.unchecked_contains(&item));
 
@@ -217,7 +217,7 @@ mod tests {
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &revoked_serial,
-            log_timestamps: None,
+            log_timestamp: None,
         };
         assert!(matches!(
             clubcard.contains(&item),
@@ -226,31 +226,33 @@ mod tests {
 
         // Test that calling contains() without a timestamp in a covered interval results in a
         // Member return.
-        let timestamps = [([0u8; 32], 100)];
+        let log_id = [0u8; 32];
+        let timestamp = (&log_id, 100);
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &revoked_serial,
-            log_timestamps: Some(&timestamps),
+            log_timestamp: Some(&timestamps),
         };
         assert!(matches!(clubcard.contains(&item), Membership::Member));
 
         // Test that calling contains() without a timestamp in a covered interval results in a
         // Member return.
-        let timestamps = [([0u8; 32], 100)];
+        let timestamps = (&log_id, 100);
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &nonrevoked_serial,
-            log_timestamps: Some(&timestamps),
+            log_timestamp: Some(&timestamps),
         };
         assert!(matches!(clubcard.contains(&item), Membership::Nonmember));
 
         // Test that calling contains() without a timestamp in a covered interval results in a
         // Member return.
-        let timestamps = [([1u8; 32], 100)];
+        let log_id = [1u8; 32];
+        let timestamps = (&log_id, 100);
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &revoked_serial,
-            log_timestamps: Some(&timestamps),
+            log_timestamp: Some(&timestamps),
         };
         assert!(matches!(
             clubcard.contains(&item),

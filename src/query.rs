@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use clubcard::{AsQuery, Clubcard, Equation, Membership, Queryable};
+use clubcard::{ApproximateSizeOf, AsQuery, Clubcard, Equation, Membership, Queryable};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cmp::max;
@@ -182,5 +182,18 @@ impl CRLiteClubcard {
             return status;
         }
         CRLiteStatus::NotCovered
+    }
+}
+
+impl ApproximateSizeOf for CRLiteCoverage {
+    fn approximate_size_of(&self) -> usize {
+        size_of::<HashMap<LogId, TimestampInterval>>()
+            + self.0.len() * (size_of::<LogId>() + size_of::<TimestampInterval>())
+    }
+}
+
+impl ApproximateSizeOf for CRLiteClubcard {
+    fn approximate_size_of(&self) -> usize {
+        self.0.approximate_size_of()
     }
 }

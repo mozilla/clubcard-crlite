@@ -99,7 +99,7 @@ impl Filterable<4> for CRLiteBuilderItem {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use crate::builder::*;
     use clubcard::builder::*;
     use clubcard::Membership;
     use std::collections::HashMap;
@@ -231,28 +231,28 @@ mod tests {
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &revoked_serial,
-            log_timestamp: Some(&timestamps),
+            log_timestamp: Some(timestamp),
         };
         assert!(matches!(clubcard.contains(&item), Membership::Member));
 
         // Test that calling contains() without a timestamp in a covered interval results in a
         // Member return.
-        let timestamps = (&log_id, 100);
+        let timestamp = (&log_id, 100);
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &nonrevoked_serial,
-            log_timestamp: Some(&timestamps),
+            log_timestamp: Some(timestamp),
         };
         assert!(matches!(clubcard.contains(&item), Membership::Nonmember));
 
         // Test that calling contains() without a timestamp in a covered interval results in a
         // Member return.
         let log_id = [1u8; 32];
-        let timestamps = (&log_id, 100);
+        let timestamp = (&log_id, 100);
         let item = CRLiteQuery {
             issuer: &issuer,
             serial: &revoked_serial,
-            log_timestamp: Some(&timestamps),
+            log_timestamp: Some(timestamp),
         };
         assert!(matches!(
             clubcard.contains(&item),

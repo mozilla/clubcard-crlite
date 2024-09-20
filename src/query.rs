@@ -9,24 +9,28 @@ use std::cmp::max;
 use std::collections::HashMap;
 use std::fmt;
 
+const W: usize = 4;
+
+type IssuerSpkiHash = [u8; 32];
 type LogId = [u8; 32];
-type TimestampInterval = (u64, u64);
+type Timestamp = u64;
+type TimestampInterval = (Timestamp, Timestamp);
 
 #[derive(Serialize, Deserialize)]
 pub struct CRLiteCoverage(pub(crate) HashMap<LogId, TimestampInterval>);
 
 #[derive(Clone, Debug)]
 pub struct CRLiteQuery<'a> {
-    pub(crate) issuer: &'a [u8; 32],
+    pub(crate) issuer: &'a IssuerSpkiHash,
     pub(crate) serial: &'a [u8],
-    pub(crate) log_timestamp: Option<(&'a [u8; 32], u64)>,
+    pub(crate) log_timestamp: Option<(&'a LogId, Timestamp)>,
 }
 
 impl<'a> CRLiteQuery<'a> {
     pub fn new(
-        issuer: &'a [u8; 32],
+        issuer: &'a IssuerSpkiHash,
         serial: &'a [u8],
-        log_timestamp: Option<(&'a [u8; 32], u64)>,
+        log_timestamp: Option<(&'a LogId, u64)>,
     ) -> CRLiteQuery<'a> {
         CRLiteQuery {
             issuer,
@@ -36,12 +40,12 @@ impl<'a> CRLiteQuery<'a> {
     }
 }
 
-impl<'a> AsQuery<4> for CRLiteQuery<'a> {
+impl<'a> AsQuery<W> for CRLiteQuery<'a> {
     fn block(&self) -> &[u8] {
         self.issuer.as_ref()
     }
 
-    fn as_query(&self, m: usize) -> Equation<4> {
+    fn as_query(&self, m: usize) -> Equation<W> {
         let mut digest = [0u8; 32];
         let mut hasher = Sha256::new();
         hasher.update(self.issuer);
@@ -67,7 +71,7 @@ impl<'a> AsQuery<4> for CRLiteQuery<'a> {
     }
 }
 
-impl<'a> Queryable<4> for CRLiteQuery<'a> {
+impl<'a> Queryable<W> for CRLiteQuery<'a> {
     type UniverseMetadata = CRLiteCoverage;
 
     // The set of CRLiteKeys is partitioned by issuer, and each
@@ -114,16 +118,16 @@ impl From<Membership> for CRLiteStatus {
     }
 }
 
-pub struct CRLiteClubcard(Clubcard<4, CRLiteCoverage, ()>);
+pub struct CRLiteClubcard(Clubcard<W, CRLiteCoverage, ()>);
 
-impl From<Clubcard<4, CRLiteCoverage, ()>> for CRLiteClubcard {
-    fn from(inner: Clubcard<4, CRLiteCoverage, ()>) -> CRLiteClubcard {
+impl From<Clubcard<W, CRLiteCoverage, ()>> for CRLiteClubcard {
+    fn from(inner: Clubcard<W, CRLiteCoverage, ()>) -> CRLiteClubcard {
         CRLiteClubcard(inner)
     }
 }
 
-impl AsRef<Clubcard<4, CRLiteCoverage, ()>> for CRLiteClubcard {
-    fn as_ref(&self) -> &Clubcard<4, CRLiteCoverage, ()> {
+impl AsRef<Clubcard<W, CRLiteCoverage, ()>> for CRLiteClubcard {
+    fn as_ref(&self) -> &Clubcard<W, CRLiteCoverage, ()> {
         &self.0
     }
 }
@@ -162,9 +166,9 @@ impl CRLiteClubcard {
 
     pub fn contains<'a>(
         &self,
-        issuer_spki_hash: &'a [u8; 32],
+        issuer_spki_hash: &'a IssuerSpkiHash,
         serial: &'a [u8],
-        timestamps: impl Iterator<Item = (&'a [u8; 32], u64)>,
+        timestamps: impl Iterator<Item = (&'a LogId, Timestamp)>,
     ) -> CRLiteStatus {
         for (log_id, timestamp) in timestamps {
             let crlite_key = CRLiteQuery::new(issuer_spki_hash, serial, Some((log_id, timestamp)));

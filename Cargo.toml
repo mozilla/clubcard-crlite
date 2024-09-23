@@ -3,7 +3,7 @@ name = "clubcard-crlite"
 authors = ["John M. Schanck <jschanck@mozilla.com>"]
 version = "0.1.0"
 license = "MPL-2.0"
-repository = "https://github.com/jschanck/clubcard-crlite/"
+repository = "https://github.com/mozilla/clubcard-crlite/"
 description = "An instantiation of Clubcard for use in CRLite"
 edition = "2021"
 

@@ -11,6 +11,30 @@ use base64::Engine;
 use std::io::Read;
 
 impl CRLiteCoverage {
+    // The ct-logs.json file tells us which CT logs the ct-fetch process
+    // monitored. For each log, it lists
+    //   (1) the contiguous range of indices of Merkle tree leaves that
+    //       ct-fetch downloaded,
+    //   (2) the earliest and latest timestamps on those Merkle tree
+    //       leaves, and
+    //   (3) the maximum merge delay (MMD).
+    //
+    // Intuitively, "coverage" should reflect the [MinEntry, MaxEntry] range.
+    // However, certificates only include timestamps, not indices, and
+    // timestamps do not increase monotonically with leaf index.
+    //
+    // The timestamp in an embedded SCT is a promise from a log that it will
+    // assign an index in the next MMD window. So if
+    //   timestamp(Cert A) + MMD <= timestamp(Cert B)
+    // then
+    //   index(Cert A) < index(Cert B).
+    //
+    // It follows that a certificate has an index in [MinEntry, MaxEntry] if
+    //   MinTimestamp + MMD <= timestamp(certificate) <= MaxTimestamp - MMD
+    //
+    // In the event that MinEntry = 0, we can refine this to
+    //   0 <= timestamp(certificate) <= MaxTimestamp - MMD
+    //
     pub fn from_mozilla_ct_logs_json<T>(reader: T) -> Self
     where
         T: Read,
@@ -21,6 +45,8 @@ impl CRLiteCoverage {
             LogID: String,
             MaxTimestamp: u64,
             MinTimestamp: u64,
+            MMD: u64,
+            MinEntry: u64,
         }
 
         let mut coverage = HashMap::new();
@@ -34,7 +60,15 @@ impl CRLiteCoverage {
                 Ok(bytes) if bytes.len() == 32 => log_id.copy_from_slice(&bytes),
                 _ => continue,
             };
-            coverage.insert(log_id, (entry.MinTimestamp, entry.MaxTimestamp));
+            let min_covered = if entry.MinEntry == 0 {
+                0
+            } else {
+                entry.MinTimestamp + entry.MMD
+            };
+            let max_covered = entry.MaxTimestamp.saturating_sub(entry.MMD);
+            if min_covered < max_covered {
+                coverage.insert(log_id, (min_covered, max_covered));
+            }
         }
         CRLiteCoverage(coverage)
     }

@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::fmt;
+use std::mem::size_of;
 
 const W: usize = 4;
 
@@ -151,10 +152,10 @@ impl CRLiteClubcard {
 
     /// Deserialize a clubcard.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ClubcardError> {
-        if bytes.len() < std::mem::size_of::<u16>() {
+        if bytes.len() < size_of::<u16>() {
             return Err(ClubcardError::Deserialize);
         }
-        let (version_bytes, rest) = bytes.split_at(std::mem::size_of::<u16>());
+        let (version_bytes, rest) = bytes.split_at(size_of::<u16>());
         let Ok(version_bytes) = version_bytes.try_into() else {
             return Err(ClubcardError::Deserialize);
         };

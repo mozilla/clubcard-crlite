@@ -2,7 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use clubcard::{ApproximateSizeOf, AsQuery, Clubcard, Equation, Membership, Queryable};
+use base64::Engine;
+use clubcard::{
+    ApproximateSizeOf, AsQuery, Clubcard, ClubcardIndex, Equation, Membership, Queryable,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cmp::max;
@@ -135,7 +138,59 @@ impl AsRef<Clubcard<W, CRLiteCoverage, ()>> for CRLiteClubcard {
 
 impl std::fmt::Display for CRLiteClubcard {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
+        writeln!(f, "{}", self.0);
+        writeln!(f, "{:=^80}", " Coverage ")?;
+        writeln!(
+            f,
+            "{: ^46}  {: >16}{: >16}",
+            "CT Log ID", "Min Time", "Max Time"
+        )?;
+        writeln!(f, "{:-<80}", "")?;
+        let mut coverage_data = self
+            .universe()
+            .0
+            .iter()
+            .map(|(log_id, (low, high))| {
+                (base64::prelude::BASE64_STANDARD.encode(log_id), *low, *high)
+            })
+            .collect::<Vec<(String, u64, u64)>>();
+        coverage_data.sort_by_key(|x| u64::MAX - x.2);
+        for (log_id, low, high) in coverage_data {
+            writeln!(f, "{: >46},{: >16},{: >16}", log_id, low, high)?;
+        }
+        writeln!(f, "")?;
+        writeln!(f, "{:=^80}", " Index ")?;
+        writeln!(
+            f,
+            "{: ^46}{: >10}{: >10}{: >14}",
+            "Issuer ID", "Exceptions", "Rank", "Bits"
+        )?;
+        writeln!(f, "{:-<80}", "")?;
+        let mut index_data = self
+            .0
+            .index()
+            .iter()
+            .map(|(block, entry)| {
+                let filter_size =
+                    entry.approx_filter_m * entry.approx_filter_rank + entry.exact_filter_m;
+                (
+                    base64::prelude::BASE64_URL_SAFE.encode(&block),
+                    entry.approx_filter_rank,
+                    entry.exceptions.len(),
+                    filter_size,
+                )
+            })
+            .collect::<Vec<(String, usize, usize, usize)>>();
+        index_data.sort_by_key(|x| usize::MAX - x.3);
+
+        for (issuer, rank, exceptions, filter_size) in &index_data {
+            writeln!(
+                f,
+                "{: >46},{: >9},{: >9},{: >13}",
+                issuer, exceptions, rank, filter_size
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -166,6 +221,14 @@ impl CRLiteClubcard {
         bincode::deserialize(rest)
             .map(CRLiteClubcard)
             .map_err(|_| ClubcardError::Deserialize)
+    }
+
+    pub fn universe(&self) -> &CRLiteCoverage {
+        self.0.universe()
+    }
+
+    pub fn index(&self) -> &ClubcardIndex {
+        self.0.index()
     }
 
     pub fn contains<'a>(

@@ -8,7 +8,7 @@ description = "An instantiation of Clubcard for use in CRLite"
 edition = "2021"
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.21"
 bincode = "1.3"
 clubcard = "0.3"
 rand = { version = "0.8", optional = true }

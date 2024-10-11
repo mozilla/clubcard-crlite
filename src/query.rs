@@ -138,7 +138,7 @@ impl AsRef<Clubcard<W, CRLiteCoverage, ()>> for CRLiteClubcard {
 
 impl std::fmt::Display for CRLiteClubcard {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}", self.0);
+        writeln!(f, "{}", self.0)?;
         writeln!(f, "{:=^80}", " Coverage ")?;
         writeln!(
             f,

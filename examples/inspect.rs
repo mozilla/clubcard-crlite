@@ -3,7 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use clubcard_crlite::CRLiteClubcard;
-use sha2::{Digest, Sha256};
 use std::env::args;
 use std::path::PathBuf;
 use std::process::ExitCode;

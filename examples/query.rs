@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use clubcard_crlite::{CRLiteClubcard, CRLiteStatus};
+use clubcard_crlite::{CRLiteClubcard, CRLiteKey, CRLiteStatus};
 use sha2::{Digest, Sha256};
 use std::env::args;
 use std::path::PathBuf;
@@ -87,12 +87,9 @@ fn main() -> std::process::ExitCode {
 
     let issuer_spki_hash: [u8; 32] = Sha256::digest(issuer.tbs_certificate.subject_pki.raw).into();
     let serial = cert.tbs_certificate.raw_serial();
+    let key = CRLiteKey::new(&issuer_spki_hash, &serial);
 
-    match filter.contains(
-        &issuer_spki_hash,
-        serial,
-        scts.iter().map(|sct| (sct.id.key_id, sct.timestamp)),
-    ) {
+    match filter.contains(&key, scts.iter().map(|sct| (sct.id.key_id, sct.timestamp))) {
         CRLiteStatus::Good => println!("Good"),
         CRLiteStatus::Revoked => println!("Revoked"),
         CRLiteStatus::NotEnrolled | CRLiteStatus::NotCovered => println!("Unknown"),

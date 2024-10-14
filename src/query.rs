@@ -75,7 +75,7 @@ impl<'a> AsQuery<W> for CRLiteQuery<'a> {
             a[i] = x;
         }
         a[0] |= 1;
-        let s = (a[3] as usize) % max(1, m);
+        let s = (a[3] % (max(1, m) as u64)) as usize;
         Equation::homogeneous(s, a)
     }
 

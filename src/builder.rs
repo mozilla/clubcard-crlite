@@ -61,7 +61,7 @@ impl CRLiteCoverage {
                 _ => continue,
             };
             let min_covered = if entry.MinEntry == 0 {
-                0
+                entry.MinTimestamp
             } else {
                 entry.MinTimestamp + entry.MMD
             };

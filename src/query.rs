@@ -242,7 +242,7 @@ impl CRLiteClubcard {
 
     pub fn contains<'a>(
         &self,
-        key: &'a CRLiteKey<'a>,
+        key: &CRLiteKey<'a>,
         timestamps: impl Iterator<Item = (&'a LogId, Timestamp)>,
     ) -> CRLiteStatus {
         for (log_id, timestamp) in timestamps {

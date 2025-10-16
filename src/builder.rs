@@ -60,12 +60,16 @@ impl CRLiteCoverage {
                 Ok(bytes) if bytes.len() == 32 => log_id.copy_from_slice(&bytes),
                 _ => continue,
             };
+            // The MMD is in seconds but timestamps are in milliseconds
+            let Some(entry_mmd_ms) = entry.MMD.checked_mul(1000) else {
+                continue;
+            };
             let min_covered = if entry.MinEntry == 0 {
                 entry.MinTimestamp
             } else {
-                entry.MinTimestamp + entry.MMD
+                entry.MinTimestamp + entry_mmd_ms
             };
-            let max_covered = entry.MaxTimestamp.saturating_sub(entry.MMD);
+            let max_covered = entry.MaxTimestamp.saturating_sub(entry_mmd_ms);
             if min_covered < max_covered {
                 coverage.insert(log_id, (min_covered, max_covered));
             }

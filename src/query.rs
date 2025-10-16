@@ -57,7 +57,7 @@ impl<'a> CRLiteQuery<'a> {
     }
 }
 
-impl<'a> AsQuery<W> for CRLiteQuery<'a> {
+impl AsQuery<W> for CRLiteQuery<'_> {
     fn block(&self) -> &[u8] {
         self.key.issuer.as_ref()
     }
@@ -84,7 +84,7 @@ impl<'a> AsQuery<W> for CRLiteQuery<'a> {
     }
 }
 
-impl<'a> Queryable<W> for CRLiteQuery<'a> {
+impl Queryable<W> for CRLiteQuery<'_> {
     type UniverseMetadata = CRLiteCoverage;
 
     // The set of CRLiteKeys is partitioned by issuer, and each

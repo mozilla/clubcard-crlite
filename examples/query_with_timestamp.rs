@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+use base64::Engine;
 use clubcard_crlite::{CRLiteClubcard, CRLiteKey, CRLiteStatus};
 use sha2::{Digest, Sha256};
 use std::env::args;
@@ -17,16 +18,24 @@ fn read_as_der(path: &PathBuf) -> Result<Vec<u8>, std::io::Error> {
     }
 }
 
-fn parse_args() -> Option<(PathBuf, PathBuf, PathBuf)> {
-    let mut args = args().map(PathBuf::from);
+fn parse_args() -> Option<(PathBuf, PathBuf, PathBuf, String, u64)> {
+    let mut args = args();
     let _name = args.next()?;
-    Some((args.next()?, args.next()?, args.next()?))
+    Some((
+        args.next()?.into(),
+        args.next()?.into(),
+        args.next()?.into(),
+        args.next()?,
+        args.next()?.parse().ok()?,
+    ))
 }
 
 fn main() -> std::process::ExitCode {
-    let Some((filter_path, issuer_cert_path, end_entity_cert_path)) = parse_args() else {
+    let Some((filter_path, issuer_cert_path, end_entity_cert_path, base64_log_id, timestamp)) =
+        parse_args()
+    else {
         eprintln!(
-            "Usage: {} <filter> <issuer certificate> <end entity certificate>",
+            "Usage: {} <filter> <issuer certificate> <end entity certificate> <log id> <timestamp>",
             args().next().unwrap()
         );
         return ExitCode::FAILURE;
@@ -72,24 +81,18 @@ fn main() -> std::process::ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let Ok(Some(sct_extension)) = cert
-        .tbs_certificate
-        .get_extension_unique(&x509_parser::oid_registry::OID_CT_LIST_SCT)
-    else {
-        eprintln!("End entity certificate has no SCTs");
-        return ExitCode::FAILURE;
+    let mut log_id = [0u8; 32];
+    match base64::prelude::BASE64_STANDARD.decode(&base64_log_id) {
+        Ok(bytes) if bytes.len() == 32 => log_id.copy_from_slice(&bytes),
+        _ => return ExitCode::FAILURE,
     };
-
-    let ParsedExtension::SCT(scts) = sct_extension.parsed_extension() else {
-        eprintln!("End entity certificate has no SCTs");
-        return ExitCode::FAILURE;
-    };
+    let scts = vec![(&log_id, timestamp)];
 
     let issuer_spki_hash: [u8; 32] = Sha256::digest(issuer.tbs_certificate.subject_pki.raw).into();
     let serial = cert.tbs_certificate.raw_serial();
     let key = CRLiteKey::new(&issuer_spki_hash, serial);
 
-    match filter.contains(&key, scts.iter().map(|sct| (sct.id.key_id, sct.timestamp))) {
+    match filter.contains(&key, scts.into_iter()) {
         CRLiteStatus::Good => println!("Good"),
         CRLiteStatus::Revoked => println!("Revoked"),
         CRLiteStatus::NotEnrolled | CRLiteStatus::NotCovered => println!("Unknown"),

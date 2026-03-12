@@ -12,6 +12,7 @@ use std::cmp::max;
 use std::collections::HashMap;
 use std::fmt;
 use std::mem::size_of;
+use std::error::Error;
 
 const W: usize = 4;
 
@@ -111,6 +112,18 @@ pub enum ClubcardError {
     Deserialize,
     UnsupportedVersion,
 }
+
+impl fmt::Display for ClubcardError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Serialize => write!(f, "failed to serialize clubcard"),
+            Self::Deserialize => write!(f, "failed to deserialize clubcard"),
+            Self::UnsupportedVersion => write!(f, "unsupported clubcard version"),
+        }
+    }
+}
+
+impl Error for ClubcardError {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CRLiteStatus {

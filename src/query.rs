@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::cmp::max;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt;
 use std::mem::size_of;
-use std::error::Error;
 
 const W: usize = 4;
 

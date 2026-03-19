@@ -24,6 +24,12 @@ type TimestampInterval = (Timestamp, Timestamp);
 #[derive(Serialize, Deserialize)]
 pub struct CRLiteCoverage(pub(crate) HashMap<LogId, TimestampInterval>);
 
+impl CRLiteCoverage {
+    pub fn iter(&self) -> impl Iterator<Item = (&LogId, &TimestampInterval)> {
+        self.0.iter()
+    }
+}
+
 #[derive(Debug)]
 pub struct CRLiteKey<'a> {
     pub(crate) issuer: &'a IssuerSpkiHash,

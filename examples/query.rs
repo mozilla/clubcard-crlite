@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use x509_parser::prelude::*;
 
 fn read_as_der(path: &PathBuf) -> Result<Vec<u8>, std::io::Error> {
-    let bytes = std::fs::read(&path)?;
+    let bytes = std::fs::read(path)?;
     match parse_x509_pem(&bytes) {
         Ok((_, pem)) => Ok(pem.contents),
         _ => Ok(bytes),
@@ -87,7 +87,7 @@ fn main() -> std::process::ExitCode {
 
     let issuer_spki_hash: [u8; 32] = Sha256::digest(issuer.tbs_certificate.subject_pki.raw).into();
     let serial = cert.tbs_certificate.raw_serial();
-    let key = CRLiteKey::new(&issuer_spki_hash, &serial);
+    let key = CRLiteKey::new(&issuer_spki_hash, serial);
 
     match filter.contains(&key, scts.iter().map(|sct| (sct.id.key_id, sct.timestamp))) {
         CRLiteStatus::Good => println!("Good"),

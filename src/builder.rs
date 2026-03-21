@@ -190,7 +190,7 @@ mod tests {
         log_coverage.insert([0u8; 32], (0u64, u64::MAX));
 
         let clubcard =
-            clubcard_builder.build::<CRLiteQuery>(CRLiteCoverage(log_coverage), Default::default());
+            clubcard_builder.build::<CRLiteQuery>(CRLiteCoverage(log_coverage), ());
         println!("{}", clubcard);
 
         let sum_subset_sizes: usize = subset_sizes.iter().sum();
@@ -230,7 +230,7 @@ mod tests {
         let key = CRLiteKey::new(&issuer, &serial);
         assert!(!clubcard.unchecked_contains(&CRLiteQuery::new(&key, None)));
 
-        assert!(subset_sizes.len() > 0 && subset_sizes[0] > 0 && subset_sizes[0] < universe_size);
+        assert!(!subset_sizes.is_empty() && subset_sizes[0] > 0 && subset_sizes[0] < universe_size);
         let issuer = [0u8; 32];
         let revoked_serial = 0usize.to_le_bytes();
         let nonrevoked_serial = (universe_size - 1).to_le_bytes();

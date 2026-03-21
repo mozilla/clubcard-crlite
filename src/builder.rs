@@ -189,8 +189,7 @@ mod tests {
         let mut log_coverage = HashMap::new();
         log_coverage.insert([0u8; 32], (0u64, u64::MAX));
 
-        let clubcard =
-            clubcard_builder.build::<CRLiteQuery>(CRLiteCoverage(log_coverage), ());
+        let clubcard = clubcard_builder.build::<CRLiteQuery>(CRLiteCoverage(log_coverage), ());
         println!("{}", clubcard);
 
         let sum_subset_sizes: usize = subset_sizes.iter().sum();

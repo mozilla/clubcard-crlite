@@ -5,8 +5,12 @@
 #[cfg(feature = "builder")]
 pub mod builder;
 
+mod codec;
+
 mod query;
 pub use query::{
     CRLiteClubcard, CRLiteCoverage, CRLiteKey, CRLiteQuery, CRLiteStatus, Encoding, IssuerSpkiHash,
     LogId, Timestamp, TimestampInterval,
 };
+
+pub(crate) const W: usize = 4;

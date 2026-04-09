@@ -131,11 +131,16 @@ impl Filterable<4> for CRLiteBuilderItem {
 
 #[cfg(test)]
 mod tests {
-    use crate::builder::*;
+    use std::collections::HashMap;
+
     use clubcard::builder::*;
     use clubcard::Clubcard;
     use clubcard::Membership;
-    use std::collections::HashMap;
+
+    use crate::builder::*;
+    use crate::codec::Codec;
+    use crate::query::Encoding;
+    use crate::CRLiteClubcard;
 
     #[test]
     fn test_crlite_clubcard() {
@@ -211,6 +216,35 @@ mod tests {
             clubcard.contains(&query),
             Membership::NotInUniverse
         ));
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let (subset_sizes, universe_size, clubcard) = build_clubcard();
+
+        let crlite = CRLiteClubcard::from(clubcard);
+        for encoding in [Encoding::V3, Encoding::V4] {
+            let bytes = crlite.to_bytes(encoding).unwrap();
+
+            // Version prefix is LE u16 0x0004
+            assert_eq!(Encoding::read(&bytes).unwrap().0, encoding);
+
+            let restored = CRLiteClubcard::from_bytes(&bytes).unwrap();
+
+            // Verify query results match on all items
+            for i in 0..subset_sizes.len() {
+                let issuer = IssuerSpkiHash([i as u8; 32]);
+                for j in 0..universe_size {
+                    let serial = j.to_le_bytes();
+                    let key = CRLiteKey::new(&issuer, &serial);
+                    let query = CRLiteQuery::new(&key, None);
+                    assert_eq!(
+                        crlite.as_ref().unchecked_contains(&query),
+                        restored.as_ref().unchecked_contains(&query),
+                    );
+                }
+            }
+        }
     }
 
     fn build_clubcard() -> ([usize; 5], usize, Clubcard<4, CRLiteCoverage, ()>) {

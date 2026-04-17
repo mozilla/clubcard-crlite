@@ -2,24 +2,37 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use base64::Engine;
-use clubcard::{
-    ApproximateSizeOf, AsQuery, Clubcard, ClubcardIndex, Equation, Membership, Queryable,
-};
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::mem::size_of;
 
+use base64::Engine;
+use clubcard::{
+    ApproximateSizeOf, AsQuery, Clubcard, ClubcardIndex, Equation, Membership, Queryable,
+};
+use ref_cast::RefCast;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
 const W: usize = 4;
 
-type IssuerSpkiHash = [u8; 32];
-type LogId = [u8; 32];
-type Timestamp = u64;
-type TimestampInterval = (Timestamp, Timestamp);
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct IssuerSpkiHash(pub [u8; 32]);
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, RefCast, Serialize)]
+#[repr(transparent)]
+pub struct LogId(pub [u8; 32]);
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
+pub struct Timestamp(pub u64);
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct TimestampInterval {
+    pub low: Timestamp,
+    pub high: Timestamp,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct CRLiteCoverage(pub(crate) HashMap<LogId, TimestampInterval>);
@@ -39,10 +52,11 @@ pub struct CRLiteKey<'a> {
 
 impl<'a> CRLiteKey<'a> {
     pub fn new(issuer: &'a IssuerSpkiHash, serial: &'a [u8]) -> CRLiteKey<'a> {
-        let mut issuer_serial_hash = [0u8; 32];
         let mut hasher = Sha256::new();
-        hasher.update(issuer);
+        hasher.update(issuer.0);
         hasher.update(serial);
+
+        let mut issuer_serial_hash = [0u8; 32];
         hasher.finalize_into((&mut issuer_serial_hash).into());
         CRLiteKey {
             issuer,
@@ -59,14 +73,17 @@ pub struct CRLiteQuery<'a> {
 }
 
 impl<'a> CRLiteQuery<'a> {
-    pub fn new(key: &'a CRLiteKey<'a>, log_timestamp: Option<(&'a LogId, u64)>) -> CRLiteQuery<'a> {
+    pub fn new(
+        key: &'a CRLiteKey<'a>,
+        log_timestamp: Option<(&'a LogId, Timestamp)>,
+    ) -> CRLiteQuery<'a> {
         CRLiteQuery { key, log_timestamp }
     }
 }
 
 impl AsQuery<W> for CRLiteQuery<'_> {
     fn block(&self) -> &[u8] {
-        self.key.issuer.as_ref()
+        &self.key.issuer.0
     }
 
     fn as_query(&self, m: usize) -> Equation<W> {
@@ -103,8 +120,8 @@ impl Queryable<W> for CRLiteQuery<'_> {
         let Some((log_id, timestamp)) = self.log_timestamp else {
             return false;
         };
-        if let Some((low, high)) = universe.0.get(log_id) {
-            if *low <= timestamp && timestamp <= *high {
+        if let Some(interval) = universe.0.get(log_id) {
+            if interval.low <= timestamp && timestamp <= interval.high {
                 return true;
             }
         }
@@ -178,13 +195,17 @@ impl std::fmt::Display for CRLiteClubcard {
             .universe()
             .0
             .iter()
-            .map(|(log_id, (low, high))| {
-                (base64::prelude::BASE64_STANDARD.encode(log_id), *low, *high)
+            .map(|(log_id, interval)| {
+                (
+                    base64::prelude::BASE64_STANDARD.encode(log_id.0),
+                    interval.low,
+                    interval.high,
+                )
             })
-            .collect::<Vec<(String, u64, u64)>>();
-        coverage_data.sort_by_key(|x| u64::MAX - x.2);
+            .collect::<Vec<_>>();
+        coverage_data.sort_by_key(|x| u64::MAX - x.2 .0);
         for (log_id, low, high) in coverage_data {
-            writeln!(f, "{: >46},{: >16},{: >16}", log_id, low, high)?;
+            writeln!(f, "{: >46},{: >16},{: >16}", log_id, low.0, high.0)?;
         }
         writeln!(f)?;
         writeln!(f, "{:=^80}", " Index ")?;

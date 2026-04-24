@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clubcard_crlite::{CRLiteClubcard, CRLiteKey, CRLiteStatus, IssuerSpkiHash, LogId, Timestamp};
-use ref_cast::RefCast;
 use sha2::{Digest, Sha256};
 use x509_parser::prelude::*;
 
@@ -95,7 +94,7 @@ fn main() -> std::process::ExitCode {
     match filter.contains(
         &key,
         scts.iter()
-            .map(|sct| (LogId::ref_cast(sct.id.key_id), Timestamp(sct.timestamp))),
+            .map(|sct| (LogId(*sct.id.key_id), Timestamp(sct.timestamp))),
     ) {
         CRLiteStatus::Good => println!("Good"),
         CRLiteStatus::Revoked => println!("Revoked"),

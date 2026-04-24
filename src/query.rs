@@ -12,7 +12,6 @@ use base64::Engine;
 use clubcard::{
     ApproximateSizeOf, AsQuery, Clubcard, ClubcardIndex, Equation, Membership, Queryable,
 };
-use ref_cast::RefCast;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -21,8 +20,7 @@ const W: usize = 4;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct IssuerSpkiHash(pub [u8; 32]);
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, RefCast, Serialize)]
-#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct LogId(pub [u8; 32]);
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
@@ -69,13 +67,13 @@ impl<'a> CRLiteKey<'a> {
 #[derive(Clone, Debug)]
 pub struct CRLiteQuery<'a> {
     pub(crate) key: &'a CRLiteKey<'a>,
-    pub(crate) log_timestamp: Option<(&'a LogId, Timestamp)>,
+    pub(crate) log_timestamp: Option<(LogId, Timestamp)>,
 }
 
 impl<'a> CRLiteQuery<'a> {
     pub fn new(
         key: &'a CRLiteKey<'a>,
-        log_timestamp: Option<(&'a LogId, Timestamp)>,
+        log_timestamp: Option<(LogId, Timestamp)>,
     ) -> CRLiteQuery<'a> {
         CRLiteQuery { key, log_timestamp }
     }
@@ -120,7 +118,7 @@ impl Queryable<W> for CRLiteQuery<'_> {
         let Some((log_id, timestamp)) = self.log_timestamp else {
             return false;
         };
-        if let Some(interval) = universe.0.get(log_id) {
+        if let Some(interval) = universe.0.get(&log_id) {
             if interval.low <= timestamp && timestamp <= interval.high {
                 return true;
             }
@@ -283,7 +281,7 @@ impl CRLiteClubcard {
     pub fn contains<'a>(
         &self,
         key: &CRLiteKey<'a>,
-        timestamps: impl Iterator<Item = (&'a LogId, Timestamp)>,
+        timestamps: impl Iterator<Item = (LogId, Timestamp)>,
     ) -> CRLiteStatus {
         for (log_id, timestamp) in timestamps {
             let crlite_query = CRLiteQuery::new(key, Some((log_id, timestamp)));

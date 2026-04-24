@@ -261,19 +261,19 @@ mod tests {
         // Member return.
         let log_id = LogId([0u8; 32]);
         let timestamp = Timestamp(100);
-        let query = CRLiteQuery::new(&revoked_serial_key, Some((&log_id, timestamp)));
+        let query = CRLiteQuery::new(&revoked_serial_key, Some((log_id, timestamp)));
         assert!(matches!(clubcard.contains(&query), Membership::Member));
 
         // Test that calling contains() without a timestamp in a covered interval results in a
         // Member return.
         let nonrevoked_serial_key = CRLiteKey::new(&issuer, &nonrevoked_serial);
-        let query = CRLiteQuery::new(&nonrevoked_serial_key, Some((&log_id, timestamp)));
+        let query = CRLiteQuery::new(&nonrevoked_serial_key, Some((log_id, timestamp)));
         assert!(matches!(clubcard.contains(&query), Membership::Nonmember));
 
         // Test that calling contains() without a timestamp in a covered interval results in a
         // Member return.
         let log_id = LogId([1u8; 32]);
-        let query = CRLiteQuery::new(&revoked_serial_key, Some((&log_id, timestamp)));
+        let query = CRLiteQuery::new(&revoked_serial_key, Some((log_id, timestamp)));
         assert!(matches!(
             clubcard.contains(&query),
             Membership::NotInUniverse

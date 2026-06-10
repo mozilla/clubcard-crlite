@@ -133,80 +133,13 @@ impl Filterable<4> for CRLiteBuilderItem {
 mod tests {
     use crate::builder::*;
     use clubcard::builder::*;
+    use clubcard::Clubcard;
     use clubcard::Membership;
     use std::collections::HashMap;
 
     #[test]
     fn test_crlite_clubcard() {
-        let subset_sizes = [1 << 17, 1 << 16, 1 << 15, 1 << 14, 1 << 13];
-        let universe_size = 1 << 18;
-
-        let mut clubcard_builder = ClubcardBuilder::new();
-        let mut approx_builders = vec![];
-        for (i, n) in subset_sizes.iter().enumerate() {
-            let mut r = clubcard_builder.new_approx_builder(&[i as u8; 32]);
-            for j in 0usize..*n {
-                r.insert(CRLiteBuilderItem::revoked(
-                    IssuerSpkiHash([i as u8; 32]),
-                    j.to_le_bytes().to_vec(),
-                ));
-            }
-            r.set_universe_size(universe_size);
-            approx_builders.push(r)
-        }
-
-        let approx_ribbons = approx_builders
-            .drain(..)
-            .map(ApproximateRibbon::from)
-            .collect();
-
-        println!("Approx ribbons:");
-        for r in &approx_ribbons {
-            println!("\t{}", r);
-        }
-
-        clubcard_builder.collect_approx_ribbons(approx_ribbons);
-
-        let mut exact_builders = vec![];
-        for (i, n) in subset_sizes.iter().enumerate() {
-            let mut r = clubcard_builder.new_exact_builder(&[i as u8; 32]);
-            for j in 0usize..universe_size {
-                r.insert(if j < *n {
-                    CRLiteBuilderItem::revoked(
-                        IssuerSpkiHash([i as u8; 32]),
-                        j.to_le_bytes().to_vec(),
-                    )
-                } else {
-                    CRLiteBuilderItem::not_revoked(
-                        IssuerSpkiHash([i as u8; 32]),
-                        j.to_le_bytes().to_vec(),
-                    )
-                });
-            }
-            exact_builders.push(r)
-        }
-
-        let exact_ribbons = exact_builders.drain(..).map(ExactRibbon::from).collect();
-
-        println!("Exact ribbons:");
-        for r in &exact_ribbons {
-            println!("\t{}", r);
-        }
-
-        clubcard_builder.collect_exact_ribbons(exact_ribbons);
-
-        let mut log_coverage = HashMap::new();
-        log_coverage.insert(
-            LogId([0u8; 32]),
-            TimestampInterval {
-                low: Timestamp(0),
-                high: Timestamp(u64::MAX),
-            },
-        );
-
-        let clubcard = clubcard_builder.build::<CRLiteQuery>(CRLiteCoverage(log_coverage), ());
-        println!("{}", clubcard);
-
+        let (subset_sizes, universe_size, clubcard) = build_clubcard();
         let sum_subset_sizes: usize = subset_sizes.iter().sum();
         let sum_universe_sizes: usize = subset_sizes.len() * universe_size;
         let min_size = (sum_subset_sizes as f64)
@@ -278,5 +211,77 @@ mod tests {
             clubcard.contains(&query),
             Membership::NotInUniverse
         ));
+    }
+
+    fn build_clubcard() -> ([usize; 5], usize, Clubcard<4, CRLiteCoverage, ()>) {
+        let subset_sizes = [1 << 17, 1 << 16, 1 << 15, 1 << 14, 1 << 13];
+        let universe_size = 1 << 18;
+
+        let mut clubcard_builder = ClubcardBuilder::new();
+        let mut approx_builders = vec![];
+        for (i, n) in subset_sizes.iter().enumerate() {
+            let mut r = clubcard_builder.new_approx_builder(&[i as u8; 32]);
+            for j in 0usize..*n {
+                r.insert(CRLiteBuilderItem::revoked(
+                    IssuerSpkiHash([i as u8; 32]),
+                    j.to_le_bytes().to_vec(),
+                ));
+            }
+            r.set_universe_size(universe_size);
+            approx_builders.push(r)
+        }
+
+        let approx_ribbons = approx_builders
+            .drain(..)
+            .map(ApproximateRibbon::from)
+            .collect();
+
+        println!("Approx ribbons:");
+        for r in &approx_ribbons {
+            println!("\t{}", r);
+        }
+
+        clubcard_builder.collect_approx_ribbons(approx_ribbons);
+
+        let mut exact_builders = vec![];
+        for (i, n) in subset_sizes.iter().enumerate() {
+            let mut r = clubcard_builder.new_exact_builder(&[i as u8; 32]);
+            for j in 0usize..universe_size {
+                r.insert(if j < *n {
+                    CRLiteBuilderItem::revoked(
+                        IssuerSpkiHash([i as u8; 32]),
+                        j.to_le_bytes().to_vec(),
+                    )
+                } else {
+                    CRLiteBuilderItem::not_revoked(
+                        IssuerSpkiHash([i as u8; 32]),
+                        j.to_le_bytes().to_vec(),
+                    )
+                });
+            }
+            exact_builders.push(r)
+        }
+
+        let exact_ribbons = exact_builders.drain(..).map(ExactRibbon::from).collect();
+
+        println!("Exact ribbons:");
+        for r in &exact_ribbons {
+            println!("\t{}", r);
+        }
+
+        clubcard_builder.collect_exact_ribbons(exact_ribbons);
+
+        let mut log_coverage = HashMap::new();
+        log_coverage.insert(
+            LogId([0u8; 32]),
+            TimestampInterval {
+                low: Timestamp(0),
+                high: Timestamp(u64::MAX),
+            },
+        );
+
+        let clubcard = clubcard_builder.build::<CRLiteQuery>(CRLiteCoverage(log_coverage), ());
+        println!("{}", clubcard);
+        (subset_sizes, universe_size, clubcard)
     }
 }

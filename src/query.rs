@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use std::cmp::max;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -20,19 +21,50 @@ const W: usize = 4;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct IssuerSpkiHash(pub [u8; 32]);
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Hash,
+    PartialEq,
+    Serialize,
+    wincode::SchemaRead,
+    wincode::SchemaWrite,
+)]
 pub struct LogId(pub [u8; 32]);
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Ord,
+    PartialOrd,
+    PartialEq,
+    Serialize,
+    wincode::SchemaRead,
+    wincode::SchemaWrite,
+)]
 pub struct Timestamp(pub u64);
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Serialize,
+    wincode::SchemaRead,
+    wincode::SchemaWrite,
+)]
 pub struct TimestampInterval {
     pub low: Timestamp,
     pub high: Timestamp,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Serialize, wincode::SchemaRead, wincode::SchemaWrite)]
 pub struct CRLiteCoverage(pub(crate) HashMap<LogId, TimestampInterval>);
 
 impl CRLiteCoverage {
@@ -167,6 +199,72 @@ impl From<Membership> for CRLiteStatus {
 
 pub struct CRLiteClubcard(Clubcard<W, CRLiteCoverage, ()>);
 
+#[derive(wincode::SchemaRead, wincode::SchemaWrite)]
+struct ClubcardIndexEntryWire {
+    approx_filter_m: usize,
+    exact_filter_m: usize,
+    approx_filter_rank: usize,
+    approx_filter_offset: usize,
+    exact_filter_offset: usize,
+    inverted: bool,
+    exceptions: Vec<Vec<u8>>,
+}
+
+impl From<clubcard::ClubcardIndexEntry> for ClubcardIndexEntryWire {
+    fn from(value: clubcard::ClubcardIndexEntry) -> Self {
+        Self {
+            approx_filter_m: value.approx_filter_m,
+            exact_filter_m: value.exact_filter_m,
+            approx_filter_rank: value.approx_filter_rank,
+            approx_filter_offset: value.approx_filter_offset,
+            exact_filter_offset: value.exact_filter_offset,
+            inverted: value.inverted,
+            exceptions: value.exceptions,
+        }
+    }
+}
+
+impl From<ClubcardIndexEntryWire> for clubcard::ClubcardIndexEntry {
+    fn from(value: ClubcardIndexEntryWire) -> Self {
+        Self {
+            approx_filter_m: value.approx_filter_m,
+            exact_filter_m: value.exact_filter_m,
+            approx_filter_rank: value.approx_filter_rank,
+            approx_filter_offset: value.approx_filter_offset,
+            exact_filter_offset: value.exact_filter_offset,
+            inverted: value.inverted,
+            exceptions: value.exceptions,
+        }
+    }
+}
+
+#[derive(wincode::SchemaRead, wincode::SchemaWrite)]
+struct CRLiteClubcardWire {
+    universe: CRLiteCoverage,
+    partition: (),
+    index: BTreeMap<Vec<u8>, ClubcardIndexEntryWire>,
+    approx_filter: Vec<Vec<u64>>,
+    exact_filter: Vec<u64>,
+}
+
+impl From<CRLiteClubcardWire> for CRLiteClubcard {
+    fn from(value: CRLiteClubcardWire) -> Self {
+        let index = value
+            .index
+            .into_iter()
+            .map(|(k, v)| (k, v.into()))
+            .collect();
+
+        CRLiteClubcard(Clubcard {
+            universe: value.universe,
+            partition: value.partition,
+            index,
+            approx_filter: value.approx_filter,
+            exact_filter: value.exact_filter,
+        })
+    }
+}
+
 impl From<Clubcard<W, CRLiteCoverage, ()>> for CRLiteClubcard {
     fn from(inner: Clubcard<W, CRLiteCoverage, ()>) -> CRLiteClubcard {
         CRLiteClubcard(inner)
@@ -248,7 +346,36 @@ impl CRLiteClubcard {
     /// Serialize this clubcard.
     pub fn to_bytes(&self) -> Result<Vec<u8>, ClubcardError> {
         let mut out = u16::to_le_bytes(Self::SERIALIZATION_VERSION).to_vec();
-        bincode::serialize_into(&mut out, &self.0).map_err(|_| ClubcardError::Serialize)?;
+
+        let index = self
+            .0
+            .index
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    ClubcardIndexEntryWire {
+                        approx_filter_m: v.approx_filter_m,
+                        exact_filter_m: v.exact_filter_m,
+                        approx_filter_rank: v.approx_filter_rank,
+                        approx_filter_offset: v.approx_filter_offset,
+                        exact_filter_offset: v.exact_filter_offset,
+                        inverted: v.inverted,
+                        exceptions: v.exceptions.clone(),
+                    },
+                )
+            })
+            .collect();
+
+        let wire = CRLiteClubcardWire {
+            universe: self.0.universe.clone(),
+            partition: self.0.partition,
+            index,
+            approx_filter: self.0.approx_filter.clone(),
+            exact_filter: self.0.exact_filter.clone(),
+        };
+
+        wincode::serialize_into(&mut out, &wire).map_err(|_| ClubcardError::Serialize)?;
         Ok(out)
     }
 
@@ -265,8 +392,8 @@ impl CRLiteClubcard {
         if version != Self::SERIALIZATION_VERSION {
             return Err(ClubcardError::UnsupportedVersion);
         }
-        bincode::deserialize(rest)
-            .map(CRLiteClubcard)
+        wincode::deserialize::<CRLiteClubcardWire>(rest)
+            .map(CRLiteClubcard::from)
             .map_err(|_| ClubcardError::Deserialize)
     }
 

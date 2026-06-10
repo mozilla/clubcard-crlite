@@ -18,6 +18,12 @@ use sha2::{Digest, Sha256};
 
 const W: usize = 4;
 
+fn crlite_wincode_config() -> impl wincode::config::Config {
+    // CRLite artifacts are trusted distribution files. Match bincode's historical
+    // no-limit behavior so production filters with large vectors continue to load.
+    wincode::config::Configuration::default().disable_preallocation_size_limit()
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct IssuerSpkiHash(pub [u8; 32]);
 
@@ -50,15 +56,7 @@ pub struct LogId(pub [u8; 32]);
 )]
 pub struct Timestamp(pub u64);
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Serialize,
-    wincode::SchemaRead,
-    wincode::SchemaWrite,
-)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, wincode::SchemaRead, wincode::SchemaWrite)]
 pub struct TimestampInterval {
     pub low: Timestamp,
     pub high: Timestamp,
@@ -375,7 +373,8 @@ impl CRLiteClubcard {
             exact_filter: self.0.exact_filter.clone(),
         };
 
-        wincode::serialize_into(&mut out, &wire).map_err(|_| ClubcardError::Serialize)?;
+        wincode::config::serialize_into(&mut out, &wire, crlite_wincode_config())
+            .map_err(|_| ClubcardError::Serialize)?;
         Ok(out)
     }
 
@@ -392,7 +391,7 @@ impl CRLiteClubcard {
         if version != Self::SERIALIZATION_VERSION {
             return Err(ClubcardError::UnsupportedVersion);
         }
-        wincode::deserialize::<CRLiteClubcardWire>(rest)
+        wincode::config::deserialize_exact::<CRLiteClubcardWire, _>(rest, crlite_wincode_config())
             .map(CRLiteClubcard::from)
             .map_err(|_| ClubcardError::Deserialize)
     }

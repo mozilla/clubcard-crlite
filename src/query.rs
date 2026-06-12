@@ -254,17 +254,14 @@ impl CRLiteClubcard {
 
     /// Deserialize a clubcard.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ClubcardError> {
-        if bytes.len() < size_of::<u16>() {
-            return Err(ClubcardError::Deserialize);
-        }
-        let (version_bytes, rest) = bytes.split_at(size_of::<u16>());
-        let Ok(version_bytes) = version_bytes.try_into() else {
+        let Some((version_bytes, rest)) = bytes.split_first_chunk() else {
             return Err(ClubcardError::Deserialize);
         };
-        let version = u16::from_le_bytes(version_bytes);
-        if version != Self::SERIALIZATION_VERSION {
+
+        if u16::from_le_bytes(*version_bytes) != Self::SERIALIZATION_VERSION {
             return Err(ClubcardError::UnsupportedVersion);
         }
+
         bincode::deserialize(rest)
             .map(CRLiteClubcard)
             .map_err(|_| ClubcardError::Deserialize)

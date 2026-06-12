@@ -3,33 +3,82 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use std::cmp::max;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fmt;
 use std::mem::size_of;
 
 use base64::Engine;
 use clubcard::{
-    ApproximateSizeOf, AsQuery, Clubcard, ClubcardIndex, Equation, Membership, Queryable,
+    ApproximateSizeOf, AsQuery, Clubcard, ClubcardIndex, ClubcardIndexEntry, Equation, Membership,
+    Queryable,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-const W: usize = 4;
+use crate::codec::{encode_len, read_len, Codec};
+use crate::W;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct IssuerSpkiHash(pub [u8; 32]);
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct LogId(pub [u8; 32]);
+
+// opaque LogId[32]: a fixed-width 32-byte SHA-256 digest, no length prefix.
+impl Codec for LogId {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.0);
+    }
+
+    fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
+        match buf.split_first_chunk() {
+            Some((bytes, rest)) => Ok((LogId(*bytes), rest)),
+            None => Err(ClubcardError::Deserialize),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]
 pub struct Timestamp(pub u64);
+
+impl Timestamp {
+    pub const MIN: Timestamp = Timestamp(0);
+    pub const MAX: Timestamp = Timestamp(u64::MAX);
+}
+
+// uint64 Timestamp, big-endian (see the u64 Codec impl).
+impl Codec for Timestamp {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        self.0.encode(buf);
+    }
+
+    fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
+        u64::read(buf).map(|(val, rest)| (Timestamp(val), rest))
+    }
+}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct TimestampInterval {
     pub low: Timestamp,
     pub high: Timestamp,
+}
+
+// struct {
+//     Timestamp low;
+//     Timestamp high;
+// } TimestampInterval;
+impl Codec for TimestampInterval {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        self.low.encode(buf);
+        self.high.encode(buf);
+    }
+
+    fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
+        let (low, buf) = Timestamp::read(buf)?;
+        let (high, buf) = Timestamp::read(buf)?;
+        Ok((TimestampInterval { low, high }, buf))
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,6 +87,68 @@ pub struct CRLiteCoverage(pub(crate) HashMap<LogId, TimestampInterval>);
 impl CRLiteCoverage {
     pub fn iter(&self) -> impl Iterator<Item = (&LogId, &TimestampInterval)> {
         self.0.iter()
+    }
+}
+
+// struct {
+//     LogId             log_id;
+//     TimestampInterval interval;
+// } Coverage;
+//
+// Coverage coverage<count>;   // uint16 count, then `count` entries
+impl Codec for CRLiteCoverage {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encode_len::<2>(self.0.len(), buf);
+        for (log_id, interval) in &self.0 {
+            log_id.encode(buf);
+            interval.encode(buf);
+        }
+    }
+
+    fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
+        let (count, mut buf) = read_len::<2>(buf)?;
+
+        let mut map = HashMap::with_capacity(count);
+        for _ in 0..count {
+            let (log_id, rest) = LogId::read(buf)?;
+            let (interval, rest) = TimestampInterval::read(rest)?;
+            map.insert(log_id, interval);
+            buf = rest;
+        }
+
+        Ok((Self(map), buf))
+    }
+}
+
+// struct {
+//     opaque             block_id[32];
+//     ClubcardIndexEntry entry;
+// } IndexEntry;
+//
+// IndexEntry index<count>;   // uint32 count, then `count` entries
+impl Codec for ClubcardIndex {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encode_len::<4>(self.len(), buf);
+        for (block_id, entry) in self {
+            buf.extend_from_slice(block_id);
+            entry.encode(buf);
+        }
+    }
+
+    fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
+        let (count, mut buf) = read_len::<4>(buf)?;
+        let mut index = BTreeMap::new();
+        for _ in 0..count {
+            let Some((block_id, rest)) = buf.split_first_chunk::<32>() else {
+                return Err(ClubcardError::Deserialize);
+            };
+
+            let (entry, rest) = ClubcardIndexEntry::read(rest)?;
+            index.insert(block_id.to_vec(), entry);
+            buf = rest;
+        }
+
+        Ok((index, buf))
     }
 }
 
@@ -242,32 +353,38 @@ impl std::fmt::Display for CRLiteClubcard {
 }
 
 impl CRLiteClubcard {
-    // Cascade-based CRLite filters use version numbers 0x0000, 0x0001, and 0x0002.
-    const SERIALIZATION_VERSION: u16 = 0x0003;
-
     /// Serialize this clubcard.
-    pub fn to_bytes(&self) -> Result<Vec<u8>, ClubcardError> {
-        let mut out = u16::to_le_bytes(Self::SERIALIZATION_VERSION).to_vec();
-        bincode::serialize_into(&mut out, &self.0).map_err(|_| ClubcardError::Serialize)?;
+    pub fn to_bytes(&self, encoding: Encoding) -> Result<Vec<u8>, ClubcardError> {
+        let mut out = Vec::with_capacity(2 + self.0.approximate_size_of());
+        encoding.encode(&mut out);
+
+        match encoding {
+            #[cfg(feature = "bincode")]
+            Encoding::V3 => {
+                bincode::serialize_into(&mut out, &self.0).map_err(|_| ClubcardError::Serialize)?
+            }
+            Encoding::V4 => self.0.encode(&mut out),
+        }
+
         Ok(out)
     }
 
     /// Deserialize a clubcard.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ClubcardError> {
-        if bytes.len() < size_of::<u16>() {
-            return Err(ClubcardError::Deserialize);
+        match Encoding::read(bytes)? {
+            #[cfg(feature = "bincode")]
+            (Encoding::V3, rest) => match bincode::deserialize(rest) {
+                Ok(clubcard) => Ok(Self(clubcard)),
+                Err(_) => Err(ClubcardError::Deserialize),
+            },
+            (Encoding::V4, rest) => {
+                let (clubcard, rest) = Clubcard::read(rest)?;
+                if !rest.is_empty() {
+                    return Err(ClubcardError::Deserialize);
+                }
+                Ok(Self(clubcard))
+            }
         }
-        let (version_bytes, rest) = bytes.split_at(size_of::<u16>());
-        let Ok(version_bytes) = version_bytes.try_into() else {
-            return Err(ClubcardError::Deserialize);
-        };
-        let version = u16::from_le_bytes(version_bytes);
-        if version != Self::SERIALIZATION_VERSION {
-            return Err(ClubcardError::UnsupportedVersion);
-        }
-        bincode::deserialize(rest)
-            .map(CRLiteClubcard)
-            .map_err(|_| ClubcardError::Deserialize)
     }
 
     pub fn universe(&self) -> &CRLiteCoverage {
@@ -305,5 +422,33 @@ impl ApproximateSizeOf for CRLiteCoverage {
 impl ApproximateSizeOf for CRLiteClubcard {
     fn approximate_size_of(&self) -> usize {
         self.0.approximate_size_of()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u16)]
+pub enum Encoding {
+    // Cascade-based CRLite filters use version numbers 0x0000, 0x0001, and 0x0002.
+    #[cfg(feature = "bincode")]
+    V3 = 3,
+    V4 = 4,
+}
+
+impl Codec for Encoding {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend((*self as u16).to_le_bytes());
+    }
+
+    fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
+        let Some((value, rest)) = buf.split_first_chunk::<2>() else {
+            return Err(ClubcardError::Deserialize);
+        };
+
+        match u16::from_le_bytes(*value) {
+            #[cfg(feature = "bincode")]
+            3 => Ok((Encoding::V3, rest)),
+            4 => Ok((Encoding::V4, rest)),
+            _ => Err(ClubcardError::UnsupportedVersion),
+        }
     }
 }

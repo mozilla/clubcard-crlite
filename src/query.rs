@@ -20,7 +20,7 @@ const W: usize = 4;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct IssuerSpkiHash(pub [u8; 32]);
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct LogId(pub [u8; 32]);
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialOrd, PartialEq, Serialize)]

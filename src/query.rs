@@ -242,12 +242,9 @@ impl std::fmt::Display for CRLiteClubcard {
 }
 
 impl CRLiteClubcard {
-    // Cascade-based CRLite filters use version numbers 0x0000, 0x0001, and 0x0002.
-    const SERIALIZATION_VERSION: u16 = 0x0003;
-
     /// Serialize this clubcard.
     pub fn to_bytes(&self) -> Result<Vec<u8>, ClubcardError> {
-        let mut out = u16::to_le_bytes(Self::SERIALIZATION_VERSION).to_vec();
+        let mut out = Encoding::V3.to_vec();
         bincode::serialize_into(&mut out, &self.0).map_err(|_| ClubcardError::Serialize)?;
         Ok(out)
     }
@@ -258,7 +255,7 @@ impl CRLiteClubcard {
             return Err(ClubcardError::Deserialize);
         };
 
-        if u16::from_le_bytes(*version_bytes) != Self::SERIALIZATION_VERSION {
+        if Encoding::try_from(version_bytes)? != Encoding::V3 {
             return Err(ClubcardError::UnsupportedVersion);
         }
 
@@ -302,5 +299,29 @@ impl ApproximateSizeOf for CRLiteCoverage {
 impl ApproximateSizeOf for CRLiteClubcard {
     fn approximate_size_of(&self) -> usize {
         self.0.approximate_size_of()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u16)]
+pub enum Encoding {
+    // Cascade-based CRLite filters use version numbers 0x0000, 0x0001, and 0x0002.
+    V3 = 3,
+}
+
+impl Encoding {
+    fn to_vec(self) -> Vec<u8> {
+        (self as u16).to_le_bytes().to_vec()
+    }
+}
+
+impl TryFrom<&[u8; 2]> for Encoding {
+    type Error = ClubcardError;
+
+    fn try_from(bytes: &[u8; 2]) -> Result<Self, Self::Error> {
+        match u16::from_le_bytes(*bytes) {
+            3 => Ok(Self::V3),
+            _ => Err(ClubcardError::UnsupportedVersion),
+        }
     }
 }

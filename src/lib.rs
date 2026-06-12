@@ -7,6 +7,6 @@ pub mod builder;
 
 mod query;
 pub use query::{
-    CRLiteClubcard, CRLiteCoverage, CRLiteKey, CRLiteQuery, CRLiteStatus, IssuerSpkiHash, LogId,
-    Timestamp, TimestampInterval,
+    CRLiteClubcard, CRLiteCoverage, CRLiteKey, CRLiteQuery, CRLiteStatus, Encoding, IssuerSpkiHash,
+    LogId, Timestamp, TimestampInterval,
 };

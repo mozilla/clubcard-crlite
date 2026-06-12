@@ -49,3 +49,13 @@ jobs:
       - run: cargo doc --all-features --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: -Dwarnings
+
+  semver-checks:
+    name: Check for semver violations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          feature-group: all-features

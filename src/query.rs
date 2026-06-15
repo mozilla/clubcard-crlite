@@ -35,7 +35,9 @@ impl Codec for LogId {
     fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
         match buf.split_first_chunk() {
             Some((bytes, rest)) => Ok((LogId(*bytes), rest)),
-            None => Err(ClubcardError::Deserialize),
+            None => Err(ClubcardError::Deserialize(
+                "not enough bytes for LogId".into(),
+            )),
         }
     }
 }
@@ -141,7 +143,9 @@ impl Codec for ClubcardIndex {
         let mut index = BTreeMap::new();
         for _ in 0..count {
             let Some((block_id, rest)) = buf.split_first_chunk::<32>() else {
-                return Err(ClubcardError::Deserialize);
+                return Err(ClubcardError::Deserialize(
+                    "not enough bytes for ClubcardIndexEntry".into(),
+                ));
             };
 
             let (entry, rest) = ClubcardIndexEntry::read(rest)?;
@@ -258,22 +262,31 @@ impl Queryable<W> for CRLiteQuery<'_> {
 
 #[derive(Debug)]
 pub enum ClubcardError {
-    Serialize,
-    Deserialize,
-    UnsupportedVersion,
+    Serialize(Box<dyn Error + Send + Sync>),
+    Deserialize(Box<dyn Error + Send + Sync>),
+    UnsupportedVersion(u16),
 }
 
 impl fmt::Display for ClubcardError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Serialize => write!(f, "failed to serialize clubcard"),
-            Self::Deserialize => write!(f, "failed to deserialize clubcard"),
-            Self::UnsupportedVersion => write!(f, "unsupported clubcard version"),
+            Self::Serialize(_) => write!(f, "failed to serialize clubcard"),
+            Self::Deserialize(_) => write!(f, "failed to deserialize clubcard"),
+            Self::UnsupportedVersion(version) => {
+                write!(f, "unsupported clubcard version ({version})")
+            }
         }
     }
 }
 
-impl Error for ClubcardError {}
+impl Error for ClubcardError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Serialize(e) | Self::Deserialize(e) => Some(&**e),
+            Self::UnsupportedVersion(_) => None,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CRLiteStatus {
@@ -378,9 +391,8 @@ impl CRLiteClubcard {
 
         match encoding {
             #[cfg(feature = "bincode")]
-            Encoding::V3 => {
-                bincode::serialize_into(&mut out, &self.0).map_err(|_| ClubcardError::Serialize)?
-            }
+            Encoding::V3 => bincode::serialize_into(&mut out, &self.0)
+                .map_err(|error| ClubcardError::Serialize(error.into()))?,
             Encoding::V4 => self.0.encode(&mut out),
         }
 
@@ -393,12 +405,14 @@ impl CRLiteClubcard {
             #[cfg(feature = "bincode")]
             (Encoding::V3, rest) => match bincode::deserialize(rest) {
                 Ok(clubcard) => Ok(Self(clubcard)),
-                Err(_) => Err(ClubcardError::Deserialize),
+                Err(error) => Err(ClubcardError::Deserialize(error.into())),
             },
             (Encoding::V4, rest) => {
                 let (clubcard, rest) = Clubcard::read(rest)?;
                 if !rest.is_empty() {
-                    return Err(ClubcardError::Deserialize);
+                    return Err(ClubcardError::Deserialize(
+                        "trailing bytes after clubcard".into(),
+                    ));
                 }
                 Ok(Self(clubcard))
             }
@@ -459,14 +473,16 @@ impl Codec for Encoding {
 
     fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
         let Some((value, rest)) = buf.split_first_chunk::<2>() else {
-            return Err(ClubcardError::Deserialize);
+            return Err(ClubcardError::Deserialize(
+                "not enough bytes for Encoding".into(),
+            ));
         };
 
         match u16::from_le_bytes(*value) {
             #[cfg(feature = "bincode")]
             3 => Ok((Encoding::V3, rest)),
             4 => Ok((Encoding::V4, rest)),
-            _ => Err(ClubcardError::UnsupportedVersion),
+            version => Err(ClubcardError::UnsupportedVersion(version)),
         }
     }
 }

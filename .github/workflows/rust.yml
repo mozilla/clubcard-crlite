@@ -5,47 +5,71 @@ on:
     branches: ['main', 'ci/*']
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable, beta]
-        exclude:
-          - os: macos-latest
-            rust: beta
-          - os: windows-latest
-            rust: beta
+  toolchains:
+    name: Determine toolchains
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      toolchains: ${{ steps.toolchains.outputs.toolchains }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - id: toolchains
+        uses: mozilla/actions/toolchains@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4
 
-    runs-on: ${{ matrix.os }}
+  test:
+    needs: toolchains
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ${{ fromJSON(needs.toolchains.outputs.toolchains) }}
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          toolchain: ${{ matrix.rust }}
-      - run: cargo test
+          persist-credentials: false
+      - uses: mozilla/actions/rust@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4
+        with:
+          version: ${{ matrix.rust }}
+      - run: cargo test --all-features
+      - run: cargo test --no-default-features
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          components: rustfmt, clippy
+          persist-credentials: false
+      - uses: mozilla/actions/rust@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4
+        with:
+          components: rustfmt clippy
       - run: cargo fmt -- --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
   docs:
     name: Check for documentation errors
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: mozilla/actions/rust@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4
+        with:
+          version: nightly
       - run: cargo doc --all-features --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: -Dwarnings
@@ -53,9 +77,22 @@ jobs:
   semver-checks:
     name: Check for semver violations
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - uses: mozilla/actions/semver@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4
         with:
           package: clubcard-crlite
+
+  deny:
+    name: Check for advisories, license, and source issues
+    permissions:
+      contents: read
+    uses: mozilla/actions/.github/workflows/deny.yml@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4
+
+  machete:
+    name: Check for unused dependencies
+    permissions:
+      contents: read
+    uses: mozilla/actions/.github/workflows/machete.yml@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4

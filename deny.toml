@@ -1,0 +1,33 @@
+# Configuration for cargo-deny (https://embarkstudios.github.io/cargo-deny/).
+# Run locally with `cargo deny check`.
+
+[advisories]
+version = 2
+# Reject crates pulled from a source whose checksum has been yanked.
+yanked = "deny"
+ignore = [
+    # bincode 1.x is intentionally unmaintained; kept for legacy compatibility.
+    "RUSTSEC-2025-0141",
+]
+
+[licenses]
+version = 2
+# All dependencies use these permissive, OSI-approved licenses. Keep this list
+# tight: a new dependency with an unlisted license should fail CI and prompt a
+# deliberate decision.
+allow = [
+    "Apache-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+]
+
+[bans]
+# Warn (don't fail) on duplicate versions of the same crate in the tree.
+multiple-versions = "warn"
+
+[sources]
+# Only allow crates from the default crates.io registry.
+unknown-registry = "deny"
+unknown-git = "deny"

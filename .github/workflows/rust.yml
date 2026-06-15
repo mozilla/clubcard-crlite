@@ -53,9 +53,9 @@ jobs:
   semver-checks:
     name: Check for semver violations
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
+      - uses: mozilla/actions/semver@312d300af3fb2b6551389bf1cb40b10e86294ec2 # v1.1.4
         with:
-          feature-group: all-features
+          package: clubcard-crlite

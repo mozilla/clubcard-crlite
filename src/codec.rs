@@ -134,7 +134,9 @@ impl Codec for u64 {
     }
 
     fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
-        let (bytes, rest) = buf.split_first_chunk().ok_or(ClubcardError::Deserialize)?;
+        let (bytes, rest) = buf.split_first_chunk().ok_or(ClubcardError::Deserialize(
+            "not enough bytes for u64".into(),
+        ))?;
         Ok((u64::from_be_bytes(*bytes), rest))
     }
 }
@@ -146,7 +148,9 @@ impl Codec for u32 {
     }
 
     fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
-        let (bytes, rest) = buf.split_first_chunk().ok_or(ClubcardError::Deserialize)?;
+        let (bytes, rest) = buf.split_first_chunk().ok_or(ClubcardError::Deserialize(
+            "not enough bytes for u32".into(),
+        ))?;
         Ok((u32::from_be_bytes(*bytes), rest))
     }
 }
@@ -158,7 +162,9 @@ impl Codec for u8 {
     }
 
     fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
-        let (&val, rest) = buf.split_first().ok_or(ClubcardError::Deserialize)?;
+        let (&val, rest) = buf
+            .split_first()
+            .ok_or(ClubcardError::Deserialize("not enough bytes for u8".into()))?;
         Ok((val, rest))
     }
 }
@@ -172,7 +178,9 @@ pub(crate) fn encode_len<const N: usize>(len: usize, buf: &mut Vec<u8>) {
 pub(crate) fn read_len<const N: usize>(buf: &[u8]) -> Result<(usize, &[u8]), ClubcardError> {
     let (len, rest) = buf
         .split_first_chunk::<N>()
-        .ok_or(ClubcardError::Deserialize)?;
+        .ok_or(ClubcardError::Deserialize(
+            "not enough bytes for length".into(),
+        ))?;
 
     let mut padded = [0u8; size_of::<usize>()];
     padded[size_of::<usize>() - N..].copy_from_slice(len);
@@ -187,7 +195,9 @@ pub(crate) fn encode_vec<const N: usize>(content: &[u8], buf: &mut Vec<u8>) {
 
 pub(crate) fn read_vec<const N: usize>(buf: &[u8]) -> Result<(&[u8], &[u8]), ClubcardError> {
     let (len, rest) = read_len::<N>(buf)?;
-    rest.split_at_checked(len).ok_or(ClubcardError::Deserialize)
+    rest.split_at_checked(len).ok_or(ClubcardError::Deserialize(
+        "not enough bytes for vector content".into(),
+    ))
 }
 
 /// `T items<count>`: an `N`-byte item *count* prefix followed by that many encoded `T`s.
@@ -204,10 +214,14 @@ pub(crate) fn read_u64_seq(buf: &[u8]) -> Result<(Vec<u64>, &[u8]), ClubcardErro
 
     let byte_len = count
         .checked_mul(size_of::<u64>())
-        .ok_or(ClubcardError::Deserialize)?;
+        .ok_or(ClubcardError::Deserialize(
+            "not enough bytes for u64 sequence length".into(),
+        ))?;
     let (words, rest) = buf
         .split_at_checked(byte_len)
-        .ok_or(ClubcardError::Deserialize)?;
+        .ok_or(ClubcardError::Deserialize(
+            "not enough bytes for u64 sequence data".into(),
+        ))?;
 
     let (chunks, _) = words.as_chunks::<{ size_of::<u64>() }>();
     let mut items = Vec::with_capacity(count);

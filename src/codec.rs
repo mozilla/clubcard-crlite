@@ -45,12 +45,12 @@ impl Codec for Clubcard<W, CRLiteCoverage, ()> {
 
         let mut approx_filter = Vec::with_capacity(column_count);
         for _ in 0..column_count {
-            let (column, rest) = read_seq::<4, u64>(buf)?;
+            let (column, rest) = read_u64_seq(buf)?;
             approx_filter.push(column);
             buf = rest;
         }
 
-        let (exact_filter, buf) = read_seq::<4, u64>(buf)?;
+        let (exact_filter, buf) = read_u64_seq(buf)?;
 
         Ok((
             Clubcard {
@@ -191,9 +191,6 @@ pub(crate) fn read_vec<const N: usize>(buf: &[u8]) -> Result<(&[u8], &[u8]), Clu
 }
 
 /// `T items<count>`: an `N`-byte item *count* prefix followed by that many encoded `T`s.
-///
-/// Unlike a byte-length prefix, the explicit count lets [`read_seq`] size the
-/// result vector with a single allocation up front.
 pub(crate) fn encode_seq<const N: usize, T: Codec>(items: &[T], buf: &mut Vec<u8>) {
     encode_len::<N>(items.len(), buf);
     for item in items {
@@ -201,19 +198,20 @@ pub(crate) fn encode_seq<const N: usize, T: Codec>(items: &[T], buf: &mut Vec<u8
     }
 }
 
-pub(crate) fn read_seq<const N: usize, T: Codec>(
-    buf: &[u8],
-) -> Result<(Vec<T>, &[u8]), ClubcardError> {
-    let (count, mut buf) = read_len::<N>(buf)?;
+/// Read `u64 items<count>` sequence; a `u32` item *count* prefix followed by that many `u64`s.
+pub(crate) fn read_u64_seq(buf: &[u8]) -> Result<(Vec<u64>, &[u8]), ClubcardError> {
+    let (count, buf) = read_len::<4>(buf)?;
 
-    // Every item is at least one byte, so the remaining length bounds the count.
-    // Capping the reservation keeps a corrupt prefix from forcing a huge allocation.
+    let byte_len = count
+        .checked_mul(size_of::<u64>())
+        .ok_or(ClubcardError::Deserialize)?;
+    let (words, rest) = buf
+        .split_at_checked(byte_len)
+        .ok_or(ClubcardError::Deserialize)?;
+
+    let (chunks, _) = words.as_chunks::<{ size_of::<u64>() }>();
     let mut items = Vec::with_capacity(count);
-    for _ in 0..count {
-        let (item, rest) = T::read(buf)?;
-        items.push(item);
-        buf = rest;
-    }
+    items.extend(chunks.iter().map(|&chunk| u64::from_be_bytes(chunk)));
 
-    Ok((items, buf))
+    Ok((items, rest))
 }

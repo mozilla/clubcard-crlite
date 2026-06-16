@@ -138,8 +138,11 @@ mod tests {
     use clubcard::Membership;
 
     use crate::builder::*;
+    #[cfg(feature = "bincode")]
     use crate::codec::Codec;
+    #[cfg(feature = "bincode")]
     use crate::query::Encoding;
+    #[cfg(feature = "bincode")]
     use crate::CRLiteClubcard;
 
     #[test]
@@ -218,6 +221,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "bincode")]
     #[test]
     fn test_serialization_roundtrip() {
         let (subset_sizes, universe_size, clubcard) = build_clubcard();

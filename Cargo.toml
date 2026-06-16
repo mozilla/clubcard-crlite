@@ -15,12 +15,17 @@ bincode = { version = "1.3", optional = true }
 clubcard = "0.3.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1", optional = true }
-sha2 = "0.10"
+sha2 = { version = "0.10", optional = true }
 
 [features]
-default = ["bincode"]
+default = ["bincode", "sha2"]
 bincode = ["dep:bincode"]
-builder = ["dep:serde_json", "clubcard/builder"]
+builder = ["dep:serde_json", "sha2", "clubcard/builder"]
+sha2 = ["dep:sha2"]
 
 [dev-dependencies]
 x509-parser = { version = "0.16", features = ["verify"] }
+
+[[example]]
+name = "query"
+required-features = ["sha2"]

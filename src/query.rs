@@ -14,6 +14,7 @@ use clubcard::{
     Queryable,
 };
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "sha2")]
 use sha2::{Digest, Sha256};
 
 use crate::codec::{encode_len, read_len, Codec};
@@ -160,6 +161,7 @@ pub struct CRLiteKey<'a> {
 }
 
 impl<'a> CRLiteKey<'a> {
+    #[cfg(feature = "sha2")]
     pub fn new(issuer: &'a IssuerSpkiHash, serial: &'a [u8]) -> CRLiteKey<'a> {
         let mut hasher = Sha256::new();
         hasher.update(issuer.0);
@@ -167,6 +169,22 @@ impl<'a> CRLiteKey<'a> {
 
         let mut issuer_serial_hash = [0u8; 32];
         hasher.finalize_into((&mut issuer_serial_hash).into());
+        CRLiteKey {
+            issuer,
+            serial,
+            issuer_serial_hash,
+        }
+    }
+
+    /// Create a CRLiteKey with a precomputed issuer_serial_hash.
+    ///
+    /// The `issuer_serial_hash` must be the `SHA256(issuer || serial)`. This is not verified
+    /// by this function; it is the caller's responsibility to ensure that the provided hash is correct.
+    pub fn with_hash(
+        issuer: &'a IssuerSpkiHash,
+        serial: &'a [u8],
+        issuer_serial_hash: [u8; 32],
+    ) -> CRLiteKey<'a> {
         CRLiteKey {
             issuer,
             serial,

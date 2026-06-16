@@ -45,6 +45,7 @@ jobs:
           version: ${{ matrix.rust }}
       - run: cargo test --all-features
       - run: cargo test --no-default-features
+      - run: cargo check --all-targets --no-default-features --features builder
 
   lint:
     runs-on: ubuntu-latest

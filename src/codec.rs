@@ -18,7 +18,7 @@ pub(crate) trait Codec: Sized {
 // struct {
 //     CRLiteCoverage universe;
 //     ClubcardIndex  index;
-//     FilterColumn   approx_filter<count>;   // uint32 count, then `count` columns
+//     FilterColumn   approx_filter<count>;   // uint8 count, then `count` columns
 //     FilterColumn   exact_filter;
 // } Clubcard;
 // ```

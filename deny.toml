@@ -8,6 +8,8 @@ yanked = "deny"
 ignore = [
     # bincode 1.x is intentionally unmaintained; kept for legacy compatibility.
     "RUSTSEC-2025-0141",
+    # time is used as a dev-dependency only so far, fixed versions have a higher MSRV
+    "RUSTSEC-2026-0009",
 ]
 
 [licenses]

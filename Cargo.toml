@@ -7,7 +7,7 @@ repository = "https://github.com/mozilla/clubcard-crlite/"
 description = "An instantiation of Clubcard for use in CRLite"
 edition = "2021"
 # Keep at or below Firefox's Rust requirement (currently 1.90).
-rust-version = "1.90"
+rust-version = "1.85"
 
 [dependencies]
 base64 = "0.22"

@@ -223,9 +223,11 @@ pub(crate) fn read_u64_seq(buf: &[u8]) -> Result<(Vec<u64>, &[u8]), ClubcardErro
             "not enough bytes for u64 sequence data".into(),
         ))?;
 
-    let (chunks, _) = words.as_chunks::<{ size_of::<u64>() }>();
     let mut items = Vec::with_capacity(count);
-    items.extend(chunks.iter().map(|&chunk| u64::from_be_bytes(chunk)));
+    // Use `as_chunks()` when MSRV is 1.88 or later
+    items.extend(words.chunks_exact(size_of::<u64>()).map(|chunk| {
+        u64::from_be_bytes(<[u8; size_of::<u64>()]>::try_from(chunk).expect("chunk is u64-sized"))
+    }));
 
     Ok((items, rest))
 }

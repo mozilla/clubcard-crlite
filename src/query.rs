@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "sha2")]
 use sha2::{Digest, Sha256};
 
-use crate::codec::{encode_len, read_len, Codec};
 use crate::W;
+use crate::codec::{Codec, encode_len, read_len};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct IssuerSpkiHash(pub [u8; 32]);
@@ -343,7 +343,7 @@ impl std::fmt::Display for CRLiteClubcard {
                 )
             })
             .collect::<Vec<_>>();
-        coverage_data.sort_by_key(|x| u64::MAX - x.2 .0);
+        coverage_data.sort_by_key(|x| u64::MAX - x.2.0);
         for (log_id, low, high) in coverage_data {
             writeln!(f, "{: >46},{: >16},{: >16}", log_id, low.0, high.0)?;
         }

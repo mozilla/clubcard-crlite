@@ -133,17 +133,17 @@ impl Filterable<4> for CRLiteBuilderItem {
 mod tests {
     use std::collections::HashMap;
 
-    use clubcard::builder::*;
     use clubcard::Clubcard;
     use clubcard::Membership;
+    use clubcard::builder::*;
 
+    #[cfg(feature = "bincode")]
+    use crate::CRLiteClubcard;
     use crate::builder::*;
     #[cfg(feature = "bincode")]
     use crate::codec::Codec;
     #[cfg(feature = "bincode")]
     use crate::query::Encoding;
-    #[cfg(feature = "bincode")]
-    use crate::CRLiteClubcard;
 
     #[test]
     fn test_crlite_clubcard() {

@@ -1,7 +1,7 @@
 use clubcard::{Clubcard, ClubcardIndex, ClubcardIndexEntry};
 
-use crate::query::{CRLiteCoverage, ClubcardError};
 use crate::W;
+use crate::query::{CRLiteCoverage, ClubcardError};
 
 /// A type with a TLS-like binary encoding.
 pub(crate) trait Codec: Sized {

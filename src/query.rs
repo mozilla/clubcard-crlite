@@ -264,7 +264,7 @@ impl Queryable<W> for CRLiteQuery<'_> {
 pub enum ClubcardError {
     Serialize(Box<dyn Error + Send + Sync>),
     Deserialize(Box<dyn Error + Send + Sync>),
-    UnsupportedVersion(u16),
+    UnsupportedVersion(u8),
 }
 
 impl fmt::Display for ClubcardError {
@@ -458,9 +458,9 @@ impl ApproximateSizeOf for CRLiteClubcard {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u16)]
+#[repr(u8)]
 pub enum Encoding {
-    // Cascade-based CRLite filters use version numbers 0x0000, 0x0001, and 0x0002.
+    // Cascade-based CRLite filters use version numbers 0x00, 0x01, and 0x02.
     #[cfg(feature = "bincode")]
     V3 = 3,
     V4 = 4,
@@ -468,21 +468,28 @@ pub enum Encoding {
 
 impl Codec for Encoding {
     fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend((*self as u16).to_le_bytes());
+        buf.push(*self as u8);
+        buf.push(0); // reserved0
     }
 
     fn read(buf: &[u8]) -> Result<(Self, &[u8]), ClubcardError> {
-        let Some((value, rest)) = buf.split_first_chunk::<2>() else {
+        let Some(([version, reserved0], rest)) = buf.split_first_chunk::<2>() else {
             return Err(ClubcardError::Deserialize(
                 "not enough bytes for Encoding".into(),
             ));
         };
 
-        match u16::from_le_bytes(*value) {
+        if *reserved0 != 0 {
+            return Err(ClubcardError::Deserialize(
+                "non-zero reserved0 byte after version".into(),
+            ));
+        }
+
+        match version {
             #[cfg(feature = "bincode")]
             3 => Ok((Encoding::V3, rest)),
             4 => Ok((Encoding::V4, rest)),
-            version => Err(ClubcardError::UnsupportedVersion(version)),
+            version => Err(ClubcardError::UnsupportedVersion(*version)),
         }
     }
 }

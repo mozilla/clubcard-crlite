@@ -230,7 +230,7 @@ mod tests {
         for encoding in [Encoding::V3, Encoding::V4] {
             let bytes = crlite.to_bytes(encoding).unwrap();
 
-            // Version prefix is LE u16 0x0004
+            // Version prefix is a u8 version followed by a zero reserved0 byte
             assert_eq!(Encoding::read(&bytes).unwrap().0, encoding);
 
             let restored = CRLiteClubcard::from_bytes(&bytes).unwrap();

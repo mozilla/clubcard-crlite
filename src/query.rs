@@ -357,8 +357,8 @@ impl std::fmt::Display for CRLiteClubcard {
         writeln!(f, "{:=^80}", " Index ")?;
         writeln!(
             f,
-            "{: ^46}{: >10}{: >10}{: >14}",
-            "Issuer ID", "Exceptions", "Rank", "Bits"
+            "{: ^46}{: >10}{: >6}{: >9}{: >9}",
+            "Issuer ID", "Exceptions", "Rank", "Inverted", "Bits"
         )?;
         writeln!(f, "{:-<80}", "")?;
         let mut index_data = self
@@ -372,17 +372,18 @@ impl std::fmt::Display for CRLiteClubcard {
                     base64::prelude::BASE64_URL_SAFE.encode(block),
                     entry.approx_filter_rank,
                     entry.exceptions.len(),
+                    entry.inverted,
                     filter_size,
                 )
             })
-            .collect::<Vec<(String, usize, usize, usize)>>();
-        index_data.sort_by_key(|x| usize::MAX - x.3);
+            .collect::<Vec<(String, usize, usize, bool, usize)>>();
+        index_data.sort_by_key(|x| usize::MAX - x.4);
 
-        for (issuer, rank, exceptions, filter_size) in &index_data {
+        for (issuer, rank, exceptions, inverted, filter_size) in &index_data {
             writeln!(
                 f,
-                "{: >46},{: >9},{: >9},{: >13}",
-                issuer, exceptions, rank, filter_size
+                "{: >46},{: >9},{: >5},{: >8},{: >8}",
+                issuer, exceptions, rank, inverted, filter_size
             )?;
         }
         Ok(())

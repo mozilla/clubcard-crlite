@@ -135,6 +135,7 @@ mod tests {
 
     use std::collections::HashMap;
 
+    use clubcard::ApproximateSizeOf;
     use clubcard::Clubcard;
     use clubcard::Membership;
     use clubcard::builder::*;
@@ -221,6 +222,84 @@ mod tests {
             clubcard.contains(&query),
             Membership::NotInUniverse
         ));
+    }
+
+    #[test]
+    fn test_inverted_issuer() {
+        // An issuer with 3/4 of its certificates revoked is encoded more compactly by
+        // encoding the complement of its revocation set.
+        let universe_size = 1 << 14;
+        let subset_size = 3 * (1 << 12);
+
+        let direct = build_one_issuer_clubcard(universe_size, subset_size, false);
+        let inverted = build_one_issuer_clubcard(universe_size, subset_size, true);
+
+        assert!(!direct.index()[ISSUER.as_slice()].inverted);
+        assert!(inverted.index()[ISSUER.as_slice()].inverted);
+
+        // Both encodings answer every query in the universe correctly.
+        let issuer = IssuerSpkiHash(ISSUER);
+        for j in 0..universe_size {
+            let serial = j.to_le_bytes();
+            let key = CRLiteKey::new(&issuer, &serial);
+            let query = CRLiteQuery::new(&key, None);
+            assert_eq!(direct.unchecked_contains(&query), j < subset_size);
+            assert_eq!(inverted.unchecked_contains(&query), j < subset_size);
+        }
+
+        // Encoding R directly gives an approximate filter of rank 0, which
+        // leads to 88% of the universe being encoded in the exact filter.
+        assert_eq!(direct.index()[ISSUER.as_slice()].approx_filter_rank, 0);
+        assert!(inverted.index()[ISSUER.as_slice()].approx_filter_rank > 0);
+        assert!(inverted.approximate_size_of() < direct.approximate_size_of());
+    }
+
+    const ISSUER: [u8; 32] = [0u8; 32];
+
+    /// Build a clubcard for a single issuer whose first `subset_size` serials are revoked.
+    /// If `inverted`, the approximate filter encodes the complement of the revocation set.
+    fn build_one_issuer_clubcard(
+        universe_size: usize,
+        subset_size: usize,
+        inverted: bool,
+    ) -> Clubcard<4, CRLiteCoverage, ()> {
+        let item = |j: usize| {
+            if j < subset_size {
+                CRLiteBuilderItem::revoked(IssuerSpkiHash(ISSUER), j.to_le_bytes().to_vec())
+            } else {
+                CRLiteBuilderItem::not_revoked(IssuerSpkiHash(ISSUER), j.to_le_bytes().to_vec())
+            }
+        };
+
+        let mut clubcard_builder = ClubcardBuilder::new();
+
+        let mut approx_builder = clubcard_builder.new_approx_builder(&ISSUER);
+        approx_builder.set_universe_size(universe_size);
+        approx_builder.set_inverted(inverted);
+        for j in 0usize..universe_size {
+            // An inverted block encodes the non-revoked serials.
+            if (j < subset_size) != inverted {
+                approx_builder.insert(item(j));
+            }
+        }
+        clubcard_builder.collect_approx_ribbons(vec![ApproximateRibbon::from(approx_builder)]);
+
+        // The exact filter is built from the whole universe either way.
+        let mut exact_builder = clubcard_builder.new_exact_builder(&ISSUER);
+        for j in 0usize..universe_size {
+            exact_builder.insert(item(j));
+        }
+        clubcard_builder.collect_exact_ribbons(vec![ExactRibbon::from(exact_builder)]);
+
+        let mut log_coverage = HashMap::new();
+        log_coverage.insert(
+            LogId([0u8; 32]),
+            TimestampInterval {
+                low: Timestamp(0),
+                high: Timestamp(u64::MAX),
+            },
+        );
+        clubcard_builder.build::<CRLiteQuery>(CRLiteCoverage(log_coverage), ())
     }
 
     #[cfg(feature = "bincode")]

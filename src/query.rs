@@ -136,6 +136,13 @@ impl Codec for ClubcardIndex {
     fn encode(&self, buf: &mut Vec<u8>) -> Result<(), ClubcardError> {
         encode_len::<4>(self.len(), buf)?;
         for (block_id, entry) in self {
+            // Block ids are encoded without a length prefix, and read() takes them to be
+            // 32 byte issuer SPKI hashes. Anything else would desynchronize the reader.
+            if block_id.len() != 32 {
+                return Err(ClubcardError::Serialize(
+                    format!("block id has {} bytes, expected 32", block_id.len()).into(),
+                ));
+            }
             buf.extend_from_slice(block_id);
             entry.encode(buf)?;
         }

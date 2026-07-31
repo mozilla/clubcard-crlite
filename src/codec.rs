@@ -328,6 +328,45 @@ mod tests {
         assert!(entry.encode(&mut Vec::new()).is_err());
     }
 
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn index_entry_rejects_oversized_offset() {
+        let mut entry = ClubcardIndexEntry {
+            approx_filter_m: 0,
+            approx_filter_rank: 0,
+            approx_filter_offset: 0,
+            exact_filter_m: 0,
+            exact_filter_offset: u32::MAX as usize,
+            inverted: false,
+            exceptions: Vec::new(),
+        };
+        entry.encode(&mut Vec::new()).unwrap();
+
+        entry.exact_filter_offset = u32::MAX as usize + 1;
+        assert!(entry.encode(&mut Vec::new()).is_err());
+    }
+
+    #[test]
+    fn index_rejects_block_id_that_is_not_32_bytes() {
+        let entry = || ClubcardIndexEntry {
+            approx_filter_m: 0,
+            approx_filter_rank: 0,
+            approx_filter_offset: 0,
+            exact_filter_m: 0,
+            exact_filter_offset: 0,
+            inverted: false,
+            exceptions: Vec::new(),
+        };
+
+        let mut index = ClubcardIndex::new();
+        index.insert(vec![0u8; 32], entry());
+        index.encode(&mut Vec::new()).unwrap();
+
+        let mut index = ClubcardIndex::new();
+        index.insert(vec![0u8; 31], entry());
+        assert!(index.encode(&mut Vec::new()).is_err());
+    }
+
     #[test]
     fn index_entry_rejects_oversized_exception_count() {
         let mut entry = ClubcardIndexEntry {
